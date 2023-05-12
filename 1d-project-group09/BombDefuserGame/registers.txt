@@ -1,0 +1,22 @@
+32 16-bit reg
+
+memory game
+- random sequence => 10 bit 1 reg / 2 bit 5 reg
+- input sequence => 1 reg / 5 reg
+- number of successes => 1 reg
+
+wiring game
+- random order => 8 bit 1 reg / 2 bit 4 reg
+- input order => 1 reg / 4 reg
+
+reaction game
+- number of successes => 1 reg
+- number of failures => 1 reg
+- random wait time => 1 reg
+
+main program
+- timer => 1 reg
+- completed games => 1 reg
+- current active game / idle => 1 reg
+- current state => 1 reg
+

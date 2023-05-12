@@ -1,0 +1,28 @@
+//displays 4-cell 7-segment outputs
+//display output is inverted (digital 0 turns on segments, digital 1 turns off)
+//clock speed is set to be optimal (not too fast that display cannot be seen, not too slow that the digits are shown one by one)
+
+module seven_seg_disp #(
+    CLK_SIZE = 16 : CLK_SIZE >= 0
+  )(
+    input clk,                // clock
+    input rst,                // reset
+    input values [4][8],      // values to show
+    output seg [8],           // LED segments
+    output sel [4]            // digit select
+  ) {
+ 
+  .clk(clk), .rst(rst) {
+    counter ctr (#SIZE(CLK_SIZE)); //slow clock 
+  }
+ 
+  
+  decoder digit_dec (#WIDTH(2)); // digit decoder
+ 
+  always {
+    seg = values[ctr.value[CLK_SIZE-1:CLK_SIZE-2]];     // select the value for the active digit and output the decoded value
+ 
+    digit_dec.in = ctr.value[CLK_SIZE-1:CLK_SIZE-2];    // decode active digit to one-hot
+    sel = digit_dec.out;                                // output the active digit
+  }
+}

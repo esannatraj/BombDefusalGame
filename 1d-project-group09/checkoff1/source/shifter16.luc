@@ -1,0 +1,24 @@
+//shifts input A by S bits, depending on shift mode
+//3 operations: SHL (0x20), SHR (0x21) and SRA (0x23)
+
+module shifter16 (
+    //INPUTS
+    input a[16], //16-bit input A
+    input s[4], //4-bit input S (number of bits to shift)
+    input alufn10[2], //ALUFN inputs 0 and 1, shift mode selector
+    
+    //OUTPUTS
+    output shift[16] //16-bit shifted output
+  ) {
+
+  always {
+    //shifter selector using ALUFN1 and ALUFN0
+    case(alufn10){
+      b00: shift = a << s; //shift left (SHL)
+      b01: shift = a >> s; //shift right (SHR)
+      b10: shift = 16b0; //unassigned
+      b11: shift = $signed(a) >>> s; //signed shift right (SRA)
+      default: shift = 16b0;
+      }
+  }
+}

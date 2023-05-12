@@ -1,0 +1,17 @@
+pin ex_dip[0][0] C48 pulldown;
+pin ex_dip[0][1] C45 pulldown;
+pin ex_dip[0][2] C43 pulldown;
+pin ex_dip[0][3] C39 pulldown;
+pin ex_dip[0][4] C37 pulldown;
+pin ex_dip[0][5] C33 pulldown;
+pin ex_dip[0][6] C31 pulldown;
+pin ex_dip[0][7] C27 pulldown;
+
+pin ex_dip[1][0] C2 pulldown;
+pin ex_dip[1][1] C6 pulldown;
+pin ex_dip[1][2] C8 pulldown;
+pin ex_dip[1][3] C12 pulldown;
+pin ex_dip[1][4] C14 pulldown;
+pin ex_dip[1][5] C18 pulldown;
+pin ex_dip[1][6] C20 pulldown;
+pin ex_dip[1][7] C24 pulldown;

@@ -1,0 +1,25 @@
+module multi_seg_cycle #(
+  DIV = 27 : DIV >= 1,
+  NUM = 2  : NUM >= 2
+    )(
+    //INPUTS
+    input clk,  // clock
+    input rst,  // reset
+    input values[NUM][4][8], //display values
+
+    //OUTPUTS
+    output disp[8], //LED segments
+    output dsel[4]  //selector signal
+  ) {
+  const WIDTH = $clog2(NUM);
+  
+  seven_seg_disp seg_disp(.clk(clk),.rst(rst));
+  counter slowClock(#SIZE(WIDTH),#DIV(DIV),#TOP(NUM),.clk(clk),.rst(rst)); //slower cycle speed compared to native clock
+
+  always {
+    seg_disp.values = values[slowClock.value[WIDTH-1:0]]; // cycle through all sets of display outputs
+    
+    disp = seg_disp.seg; 
+    dsel = seg_disp.sel;
+  }
+}

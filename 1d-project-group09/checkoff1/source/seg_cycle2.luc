@@ -1,0 +1,25 @@
+//cycles between 2 display values with adjustable cycle speed
+
+module seg_cycle2 #(
+  CLK_SIZE = 29: CLK_SIZE >= 0
+    )(
+    //INPUTS
+    input clk,  // clock
+    input rst,  // reset
+    input values[2][4][8], //display values
+
+    //OUTPUTS
+    output disp[8], //LED segments
+    output dsel[4]  //selector signal
+  ) {
+  
+  seven_seg_disp seg_disp(.clk(clk),.rst(rst));
+  counter slowClock(#SIZE(CLK_SIZE),.clk(clk),.rst(rst)); //slower cycle speed compared to native clock
+
+  always {
+    seg_disp.values = values[slowClock.value[CLK_SIZE-1]]; //alternate between two sets of display outputs
+    
+    disp = seg_disp.seg; 
+    dsel = seg_disp.sel;
+  }
+}

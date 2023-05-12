@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="BombDefuserGame" board="Alchitry Au" language="Lucid" version="3">
+  <files>
+    <src>cpu.luc</src>
+    <src>main_fsm.luc</src>
+    <component>pipeline.luc</component>
+    <component>counter.luc</component>
+    <src>alu16.luc</src>
+    <src top="true">au_top.luc</src>
+    <src>boolean16.luc</src>
+    <component>reset_conditioner.luc</component>
+    <src>seg_cycle2.luc</src>
+    <component>button_conditioner.luc</component>
+    <src>mult16.luc</src>
+    <src>rand_seq_rom.luc</src>
+    <src>timer_fsm.luc</src>
+    <component>decoder.luc</component>
+    <src>regfile_unit16.luc</src>
+    <component>pn_gen.luc</component>
+    <component>bin_to_dec.luc</component>
+    <src>multi_seg_cycle.luc</src>
+    <src>seven_seg_disp.luc</src>
+    <src>adder16.luc</src>
+    <src>varclock32.luc</src>
+    <src>shifter16.luc</src>
+    <src>compare16.luc</src>
+    <component>edge_detector.luc</component>
+    <src>hex_disp_rom.luc</src>
+    <constraint>io.acf</constraint>
+    <constraint lib="true">alchitry.acf</constraint>
+    <constraint lib="true">au.xdc</constraint>
+  </files>
+</project>

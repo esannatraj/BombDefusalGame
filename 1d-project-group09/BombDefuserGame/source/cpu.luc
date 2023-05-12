@@ -1,0 +1,148 @@
+module cpu (
+    input clk,                // clock
+    input rst,                // reset
+    
+    // main I/O
+    input game_btn,           // main button to start the game
+    output game_led[2][2],    // RG LEDs to indicate game status
+    output disp[8],           // 7-segment display signals
+    output dsel[4],           // 7-segment display selector
+    
+    // I/O for wiring game
+    input wire_in[8],         // Data input from wires
+    input wire_ce[4],         // Enable wire values check
+    output wire_out[4][2],    // Data output from wires
+    output wire_led[4],       // Status LEDs for wire connections
+    
+    // I/O for reaction game
+    input react_btn,          // Button input for reaction game
+    output react_tar_led,     // Target LED output
+    output react_prog_led[5], // Progress LEDs output
+    
+    // debug
+    output clk_led,
+    output state_led[3],
+    output timer_led[8],
+    output wire_plugged,
+    output wire_idle,
+    output reactIdle
+    
+  ) {
+  
+  // main components of CPU
+  timer_fsm timer(#MIN(5),#SEC(0),.clk(clk),.rst(rst));
+  main_fsm gameFSM(.clk(clk),.rst(rst));
+  alu16 alu;
+  regfile_unit16 regfile(.clk(clk),.rst(rst));
+  rand_seq_rom randSeq;
+  pn_gen rng(.clk(clk),.rst(rst));
+  
+  button_conditioner wireInCond[8](.clk(clk));
+  button_conditioner wireCeCond[4](.clk(clk));
+  
+  // iteration variable
+  var i;
+  
+  /* control signals: 
+     alufn, asel, bsel, reg_a, reg_b, wdsel, reg_c, we
+       
+       asel: rd1, rand_seq[7:0], rng[2:0], wire_in[7:0]
+       bsel: rd2, 1, 5, 0
+       wdsel: alu, 0, 4, 1 */
+       
+    /*registers
+      
+       r0 to r3, r9 to r11: unused
+       r4: wire led out
+       r5: hit counter
+       r6: miss counter
+       r7: rand timer
+       r8: react prog disp
+       r12 to r13: temp reg
+       r14: speed trigger
+       r15: wire sequence
+       */
+  
+  always {
+    // timer I/O
+    timer.start_btn = game_btn;
+    timer.temp_acc = regfile.acc;
+    timer.penalty = regfile.miss;
+    timer.stop = gameFSM.stop;
+    
+    // game FSM I/O
+    gameFSM.ended = timer.ended;
+    gameFSM.game_btn = game_btn;
+    
+    // wire out values
+    for (i = 2b0; i <= 2d3; i++) wire_out[i] = i;
+    
+    // WIRE game I/O
+    wireInCond.in = wire_in;
+    wireCeCond.in = wire_ce;
+    gameFSM.wire_ce = wireCeCond.out;
+    wire_led = regfile.wire_led;
+    
+    // REACT game I/O
+    gameFSM.react_btn = react_btn;
+    react_prog_led = regfile.prog;
+    game_led = gameFSM.game_led;
+    react_tar_led = gameFSM.tar_led;
+    
+    // debug
+    wire_plugged = gameFSM.wire_plugged;
+    wire_idle = gameFSM.wire_idle;
+    reactIdle = gameFSM.reactIdle;
+    clk_led = timer.clk_led;
+    state_led = timer.state_led;
+    timer_led = timer.timer_led;
+    
+    // pn_gen setup
+    rng.seed = 32h1f73eda2; // a randomly selected seed value
+    rng.next = 1; // continuously generate new values, output read when needed
+    
+    // get pseudorandom output sequence from ROM
+    randSeq.in = rng.num[3:0];
+    
+    
+    // ALU & regfile control signals
+    gameFSM.z = regfile.z;
+    alu.alufn = gameFSM.alufn;
+    
+    case(gameFSM.asel) {
+      2b00: alu.a = regfile.rd1;
+      2b01: alu.a = c{8b0,randSeq.out};
+      2b10: alu.a = c{13b0,rng.num[2:0]};
+      2b11: alu.a = c{8b0,wireInCond.out};
+      default: alu.a = regfile.rd1;
+      }
+    
+    case(gameFSM.bsel) {
+      2b00: alu.b = regfile.rd2;
+      2b01: alu.b = 16h1;
+      2b10: alu.b = 16h5;
+      2b11: alu.b = 16h0;
+      default: alu.b = regfile.rd2;
+      }
+    
+    regfile.ra1 = gameFSM.reg_a;
+    regfile.ra2 = gameFSM.reg_b;
+    
+    regfile.wa = gameFSM.reg_c;
+    
+    case(gameFSM.wdsel) {
+      2b00: regfile.wd = alu.alu;
+      2b01: regfile.wd = 16h0;
+      2b10: regfile.wd = 16h4;
+      2b11: regfile.wd = 16h1;
+      default: regfile.wd = alu.alu;
+      }
+    
+    regfile.we = gameFSM.we;
+    
+    // timer display
+    disp = timer.disp;
+    dsel = timer.dsel;
+    
+      }
+  }

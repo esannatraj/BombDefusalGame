@@ -1,0 +1,16 @@
+//calculates A*B and returns product
+//MULT (0x02)
+
+module mult16 (
+    //INPUTS
+    input a[16], //16-bit input A
+    input b[16], //16-bit input B
+    
+    //OUTPUTS
+    output p[16] //16-bit product P
+  ) {
+  always {
+    //multiply A (16-bit) by B (16-bit) and return 16-bit product as P
+    p = a * b;
+  }
+}

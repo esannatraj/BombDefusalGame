@@ -1,0 +1,14 @@
+module varclock32 (
+    input clk,  // clock
+    input rst,  // reset
+    input div[5],
+    output out
+  ) {
+  
+  counter varClock(#SIZE(32),.clk(clk),.rst(rst));
+
+  always {
+    // selects tick speed, higher div = slower clock
+    out = varClock.value[div]; 
+  }
+}

@@ -1,0 +1,31 @@
+//calculates the sum/difference of A and B
+//2 operations: ADD (0x00) and SUB (0x01)
+
+module adder16 (
+ //INPUTS
+ input a[16], //16-bit input A
+	input b[16], //16-bit input B
+	input alufn0, //ALUFN0 input, switches between addition and subtraction modes
+    
+ //OUTPUTS
+	output s[16], //16-bit output S
+ output zvn[3] //Z, V and N outputs
+  ) 
+{
+  sig b_1[16], out[16];  //intermediate signals
+  
+
+always {
+   //invert bits of B when ALUFN0 = 1
+   b_1 = b ^ 16x{alufn0};
+   
+   //when ALUFN0 = 0, out = a + b_1 + ALUFN0 = A + B
+   //when ALUFN0 = 1, out = a + b_1 + ALUFN0 = A - B (2's complement)
+   out = a + b_1 + alufn0;
+ 
+   s = out; //S carries 16-bit sum/difference
+   zvn[2] = ~|out; //Z (Zero) = 16-bit NOR of out bits
+   zvn[1] = (a[15] & b_1[15] & ~out[15]) | (~a[15] & ~b_1[15] & out[15]); //V (oVerflow): '1' when result >= 2^15 or result < -2^15
+   zvn[0] = out[15]; //N (Negative) = most significant bit (signed bit)
+  }
+}

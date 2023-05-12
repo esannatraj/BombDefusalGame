@@ -1,0 +1,60 @@
+// controls all physical inputs and outputs
+// external IO defined in constraints files
+
+module au_top (
+    input clk,              // 100MHz clock
+    input rst_n,            // reset button (active low)
+    output led [8],         // 8 user controllable LEDs
+    input usb_rx,           // USB->Serial input
+    output usb_tx,          // USB->Serial output
+    output io_led [3][8],   // LEDs on IO Shield
+    output io_seg [8],      // 7-segment LEDs on IO Shield
+    output io_sel [4],      // Digit select on IO Shield
+    input io_button [5],    // 5 buttons on IO Shield
+    input io_dip [3][8],    // DIP switches on IO Shield
+    input ex_dip [2][8]     // external DIP switches
+  ) {
+  
+  sig rst;                  // reset signal
+  
+  .clk(clk) {
+    // The reset conditioner is used to synchronize the reset signal to the FPGA
+    // clock. This ensures the entire FPGA comes out of reset at the same time.
+    reset_conditioner reset_cond;
+  }
+  // import main ALU tester
+  main_alu_tester aluTester(.clk(clk),.rst(rst));
+  
+  always {
+    reset_cond.in = ~rst_n; // input raw inverted reset signal
+    rst = reset_cond.out;   // conditioned reset
+    
+    usb_tx = usb_rx;        // loop serial port
+    
+    led = 8h00;             // turn LEDs off
+    
+    io_led = 3x{{8h00}};    // turn LEDs off
+    io_seg = 8hff;          // turn segments off
+    io_sel = 4hf;           // select no digits
+    
+    aluTester.speed_up = io_button[0]; // set speed_up button
+    aluTester.mode_toggle = io_button[1]; // set toggle button
+    aluTester.temp_stop = io_button[2]; // set temp_stop button
+    
+    aluTester.a = c{io_dip[1],io_dip[0]}; // 16-bit input A from integrated DIP switches on Io shield
+    aluTester.b = c{ex_dip[1],ex_dip[0]}; // 16-bit input B from external DIP switches
+    
+    aluTester.alufn = io_dip[2][5:0]; // ALUFN input
+    aluTester.err_trig = io_dip[2][7:6]; // DIP switches to simulate error cases
+    
+    io_led[1:0] = $build(aluTester.result,2); // display 16-bit result using LEDs
+    led[2:0] = aluTester.zvn; // external LEDS for ZVN signals
+    io_led[2][5:0] = aluTester.alufn_out; // display ALUFN during AUTO testing mode
+    
+    // 7-segment display (signals inverted in tester module)
+    io_seg = aluTester.disp;
+    io_sel = aluTester.dsel;
+    
+    io_led[2][7:6] = aluTester.err_led; // displays type of error
+  }
+}

@@ -1,0 +1,425 @@
+module main_fsm (
+    input clk,  // clock
+    input rst,  // reset
+    
+    // main I/O
+    input game_btn,
+    output game_led[2][2],
+    
+    // external signals
+    input z,
+    input ended,
+    output stop,
+    
+    // REACTION game
+    input react_btn,
+    output tar_led,
+    
+    // WIRE game
+    input wire_ce[4],
+    
+    // control signals
+    output alufn[6],
+    output asel[2],
+    output bsel[2],
+    output wdsel[2],
+    output reg_a[4],
+    output reg_b[4],
+    output reg_c[4],
+    output we,
+    
+    // debug
+    output wire_plugged,
+    output wire_idle,
+    output reactIdle
+  ) {
+  // main button
+  button_conditioner gameBtnCond[3](.clk(clk));
+  edge_detector gameBtnEdge[3](#RISE(1),#FALL(0),.clk(clk));
+  
+  // reaction button
+  button_conditioner reactCond(.clk(clk));
+  edge_detector reactEdge(#RISE(1),#FALL(0),.clk(clk));
+  
+  // LED values DFF
+  dff gameLedOut[2][2](#INIT(2x{{2b01}}),.clk(clk),.rst(rst));
+  dff tarLedOut(#INIT(0),.clk(clk),.rst(rst));
+  
+  // variable clocks
+  varclock32 varclk(.clk(clk),.div(26));
+  edge_detector varEdge(#RISE(1),#FALL(0),.clk(clk));
+  
+  varclock32 halfclk(.clk(clk),.div(25));
+  edge_detector halfEdge(#RISE(1),#FALL(0),.clk(clk));
+  
+  // main FSM of game
+  fsm game(.clk(clk)) = {MAIN_IDLE,
+    
+                         // WIRE GAME STATES
+                         WIRE_START,
+                         LD_RAND_SEQ,
+                         WIRE_IDLE,
+                         IN_XOR_SEQ_RESULT,
+                         CHK_BR_RESULT_EQ_0,
+                         ACC_TIMER,
+                         UNACC_TIMER,
+                         CLR_WIRE_LED,    
+                         WIRE_COMPLETE_RST_ACC,
+      
+                         // REACTION GAME STATES
+                         REACT_START,
+                         SET_HIT_0,
+                         SET_MISS_0,
+                         SET_TIME_1,
+                         ADD_RAND_TIME,
+                         AWAIT_TICK,
+                         TIME_DEC_1,
+                         CHK_BR_TIME_EQ_0,
+                         TAR_LED_ON_START_HALF_TIMER,
+                         REACT_IDLE,
+                         HIT_INC_1,
+                         PROG_SHL_1,
+                         PROG_INC_1,
+                         CHK_HIT_LT_5,
+                         BR_HIT_LT_5,
+                         MISS_INC_1,
+                         REACT_COMPLETE,
+    
+                         // GAME END STATES
+                         BOMB_EXPLODE,
+                         BOMB_DEFUSED,
+                         AWAIT_RESTART,
+                         RESET_GAME,
+                         RESET_ACC,
+                         RESET_PROG,
+                         RESET_WIRE_LED};
+  
+  always {
+    gameBtnCond.in = game_btn;
+    gameBtnEdge.in = gameBtnCond.out;
+    
+    reactCond.in = react_btn;
+    reactEdge.in = reactCond.out;
+    
+    // debug
+    wire_plugged = 0;
+    wire_idle = 0;
+    reactIdle = 0;
+    
+    // timer stop
+    stop = 0;
+       
+    // control signals
+    alufn = 6h00;
+    asel = 2b0;
+    bsel = 2b0;
+    wdsel = 2b0;
+    reg_a = 4d0;
+    reg_b = 4d0;
+    reg_c = 4d0;
+    we = 0;
+    
+    varclk.rst = rst;
+    varEdge.in = varclk.out;
+    
+    halfclk.rst = rst;
+    halfEdge.in = halfclk.out;
+    
+    game_led = gameLedOut.q;
+    tar_led = tarLedOut.q;
+    
+    case(game.q){
+      game.MAIN_IDLE:
+        we = 1b0;
+        
+        if (gameBtnEdge.out) {
+          game.d = game.WIRE_START;
+        }      
+      
+      // WIRE states
+      game.WIRE_START:
+        we = 0;
+        
+        gameLedOut.d[0] = 2b11;
+        game.d = game.LD_RAND_SEQ;
+        
+      game.LD_RAND_SEQ:
+        alufn = 6h1A;
+        asel = 2b01;
+        wdsel = 2b00;
+        reg_c = 4d15;
+        we = 1b1;
+        
+        game.d = game.WIRE_IDLE;
+        
+      game.WIRE_IDLE:
+        we = 1b0;
+        
+        wire_idle = 1;
+        if (&wire_ce) game.d = game.IN_XOR_SEQ_RESULT; // wait for all wires to be plugged in
+        else game.d = game.UNACC_TIMER;
+        
+      game.IN_XOR_SEQ_RESULT:
+        alufn = 6h16;
+        asel = 2b11;
+        bsel = 2b00;
+        reg_b = 4d15;
+        wdsel = 2b00;
+        reg_c = 4d4;
+        we = 1b1;
+        
+        game.d = game.CHK_BR_RESULT_EQ_0;
+        
+      game.CHK_BR_RESULT_EQ_0:
+        reg_a = 4d4;
+        we = 1b0;
+        
+        // checking whether contents of a register is 0 and branching can be performed in the same clock cycle with z signal from regfile
+        if (z) game.d = game.WIRE_COMPLETE_RST_ACC; // game complete when wires are plugged in correctly
+        else game.d = game.ACC_TIMER;
+        
+      game.ACC_TIMER:
+        wdsel = 2b11;
+        reg_c = 4d14;
+        we = 1b1;
+        
+        game.d = game.WIRE_IDLE;
+        
+      game.UNACC_TIMER:
+        wdsel = 2b01;
+        reg_c = 4d14;
+        we = 1b1;
+        
+        game.d = game.CLR_WIRE_LED;
+        
+      game.CLR_WIRE_LED:
+        wdsel = 2b01;
+        reg_c = 4d4;
+        we = 1b1;
+        
+        game.d = game.WIRE_IDLE;
+        
+      game.WIRE_COMPLETE_RST_ACC:
+        wdsel = 2b01;
+        reg_c = 4d14;
+        we = 1b1;
+        
+        gameLedOut.d[0] = 2b10;
+        game.d = game.REACT_START;
+        
+      // REACTION states
+      game.REACT_START:
+        we = 1b0;
+        
+        gameLedOut.d[1] = 2b11;
+        game.d = game.SET_HIT_0;
+        
+      game.SET_HIT_0:
+        wdsel = 2b01;
+        reg_c = 4d5;
+        we = 1b1;
+        
+        game.d = game.SET_MISS_0;
+        
+      game.SET_MISS_0:
+        wdsel = 2b01;
+        reg_c = 4d6;
+        we = 1b1;
+        
+        game.d = game.SET_TIME_1;
+        
+      // ensure that timer value is not equal to 0
+        
+      game.SET_TIME_1:
+        alufn = 6h1C; // LD 'B'
+        bsel = 2b01;
+        wdsel = 2b00;
+        reg_c = 4d7;
+        we = 1b1;
+        
+        game.d = game.ADD_RAND_TIME;
+        
+      game.ADD_RAND_TIME:
+        alufn = 6h00;
+        asel = 2b10;
+        bsel = 2b00;
+        reg_b = 4d7;
+        wdsel = 2b00;
+        reg_c = 4d7;
+        we = 1b1;
+        
+        varclk.rst = 1;
+        
+        game.d = game.AWAIT_TICK;
+        
+      game.AWAIT_TICK:
+        we = 0;
+        
+        if (reactEdge.out) game.d = game.MISS_INC_1; // if button pressed before LED turned on, impose time penalty
+        else if (varEdge.out) game.d = game.TIME_DEC_1;
+        else game.d = game.AWAIT_TICK;
+        
+      game.TIME_DEC_1:
+        alufn = 6h01;
+        asel = 2b00;
+        bsel = 2b01;
+        reg_a = 4d7;
+        wdsel = 2b00;
+        reg_c = 4d7;
+        we = 1b1;
+        
+        game.d = game.CHK_BR_TIME_EQ_0;
+        
+      game.CHK_BR_TIME_EQ_0:
+        reg_a = 4d7;
+        we = 1b0;
+        
+        if (z) game.d = game.AWAIT_TICK;
+        else game.d = game.TAR_LED_ON_START_HALF_TIMER;
+        
+      game.TAR_LED_ON_START_HALF_TIMER:
+        we = 1b0;
+        
+        tarLedOut.d = 1b1;
+        halfclk.rst = 1;
+        
+        game.d = game.REACT_IDLE;
+        
+      game.REACT_IDLE:
+        we = 1b0;
+        
+        reactIdle = 1;
+        
+        if (reactEdge.out) {
+          tarLedOut.d = 0;
+          game.d = game.HIT_INC_1;  // if player presses button when LED is on, increase score
+          }
+        else if (halfEdge.out) {
+          tarLedOut.d = 0;
+          game.d = game.MISS_INC_1; // if player misses LED blink, impose time penalty
+          }
+        else game.d = game.REACT_IDLE;
+        
+      game.HIT_INC_1:
+        alufn = 6h00;
+        asel = 2b00;
+        bsel = 2b01;
+        reg_a = 4d5;
+        wdsel = 2b00;
+        reg_c = 4d5;
+        we = 1b1;
+        
+        game.d = game.PROG_SHL_1;
+        
+      game.PROG_SHL_1:
+        alufn = 6h20;
+        asel = 2b00;
+        bsel = 2b01;
+        reg_a = 4d8;
+        wdsel = 2b00;
+        reg_c = 4d8;
+        we = 1b1;
+        
+        game.d = game.PROG_INC_1;
+        
+      game.PROG_INC_1:
+        alufn = 6h00;
+        asel = 2b00;
+        bsel = 2b01;
+        reg_a = 4d8;
+        wdsel = 2b00;
+        reg_c = 4d8;
+        we = 1b1;
+        
+        game.d = game.CHK_HIT_LT_5;
+        
+      game.CHK_HIT_LT_5:
+        alufn = 6h35;
+        asel = 2b00;
+        bsel = 2b10;
+        reg_a = 4d5;
+        wdsel = 2b00;
+        reg_c = 4d13;
+        we = 1b1;
+        
+        game.d = game.BR_HIT_LT_5;
+        
+      game.BR_HIT_LT_5:
+        reg_a = 4d13;
+        we = 1b0;
+        
+        if (z) game.d = game.REACT_COMPLETE; // complete game when player hits 5 times
+        else game.d = game.SET_TIME_1;
+        
+      game.MISS_INC_1:
+        alufn = 6h00;
+        asel = 2b00;
+        bsel = 2b01;
+        reg_a = 4d6;
+        wdsel = 2b00;
+        reg_c = 4d6;
+        we = 1b1;
+        
+        game.d = game.SET_TIME_1;
+        
+      game.REACT_COMPLETE:
+        we = 1b0;
+        
+        gameLedOut.d[1] = 2b10;
+        game.d = game.BOMB_DEFUSED;
+        
+      game.BOMB_DEFUSED:
+        we = 1b0;
+        
+        stop = 1;
+        if (gameBtnEdge.out) game.d = game.RESET_GAME;
+        else game.d = game.BOMB_DEFUSED;
+        
+      game.BOMB_EXPLODE:
+        we = 1b0;
+        
+        if (gameBtnEdge.out) game.d = game.RESET_GAME;
+        else game.d = game.BOMB_EXPLODE;
+        
+      game.RESET_GAME:
+        we = 1b0;
+        
+        gameLedOut.d = 2x{{2b01}};
+        tarLedOut.d = 0;
+        
+        game.d = game.RESET_ACC;
+        
+      game.RESET_ACC:
+        wdsel = 2b01;
+        reg_c = 4d14;
+        we = 1b1;
+        
+        game.d = game.RESET_PROG;
+        
+      game.RESET_PROG:
+        wdsel = 2b01;
+        reg_c = 4d8;
+        we = 1b1;
+        
+        game.d = game.RESET_WIRE_LED;
+        
+      game.RESET_WIRE_LED:
+        wdsel = 2b01;
+        reg_c = 4d4;
+        we = 1b1;
+        
+        game.d = game.MAIN_IDLE;
+         
+      
+      }
+    
+    // game can end at any clock cycle if timer has ended
+    if (ended) {
+      game.d = game.BOMB_EXPLODE;
+    }
+    
+    // reset to default FSM state
+    if (rst) game.d = game.MAIN_IDLE;
+    
+  }
+}

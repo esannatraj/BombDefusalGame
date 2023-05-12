@@ -1,0 +1,28 @@
+module rand_seq_rom (
+    input in[4],
+    output out[8]
+  ) {
+  
+  const SEQ = {
+    c{2d0,2d1,2d3,2d2},
+    c{2d0,2d2,2d1,2d3},
+    c{2d0,2d3,2d2,2d1},
+    c{2d0,2d2,2d3,2d1},
+    c{2d1,2d0,2d3,2d2},
+    c{2d1,2d2,2d0,2d3},
+    c{2d1,2d3,2d2,2d0},
+    c{2d1,2d0,2d2,2d3},
+    c{2d2,2d0,2d1,2d3},
+    c{2d2,2d1,2d3,2d0},
+    c{2d2,2d3,2d0,2d1},
+    c{2d2,2d3,2d1,2d0},
+    c{2d3,2d0,2d1,2d2},
+    c{2d3,2d1,2d2,2d0},
+    c{2d3,2d2,2d0,2d1},
+    c{2d3,2d1,2d0,2d2}};
+
+  always {
+    // output pseudorandom permutation of {0,1,2,3}
+    out = SEQ[in];
+  }
+}

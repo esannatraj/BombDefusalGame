@@ -1,0 +1,26 @@
+//bitwise boolean operations between A and B
+//4 operations: AND (0x18), OR (0x1E), XOR (0x16) and 'A' (0x1A)
+//can implement any 1-/2-input logic truth table
+
+module boolean16 (
+    //INPUTS
+    input a[16], //input A
+    input b[16], //input B
+    input alufn3210[4], //ALUFN inputs 0 to 3, encodes truth table of 1-/2-input logic operations
+    
+    //OUTPUTS
+    output boole[16]
+  ) {
+  var i; //iterating variable
+  always {
+    for (i = 0; i < 16; i++){
+        boole[i] = alufn3210[c{b[i],a[i]}]; //for each bit pair A[i] and B[i], output = ALUFN(B[i]A[i])
+        // B[i]=0, A[i]=0 => output = ALUFN0
+        // B[i]=0, A[i]=1 => output = ALUFN1
+        // B[i]=1, A[i]=0 => output = ALUFN2
+        // B[i]=1, A[i]=1 => output = ALUFN3
+      
+      }
+  }
+}
+

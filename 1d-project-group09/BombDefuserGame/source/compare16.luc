@@ -1,0 +1,32 @@
+//compares the values of A and B, given the Z,V and N signals from the adder module
+//3 operations: CMPEQ (0x33), CMPLT (0x35) and CMPLE (0x37)
+
+module compare16 (
+    //INPUTS
+    input zvn[3], //Z, V and N outputs from adder module
+    input alufn21[2], //ALUFN inputs 1 ad 2, comparison mode selector
+    //ALUFN0 = 1 => calculates A-B using adder module
+    
+    //OUTPUTS
+    output cmp[16] //comparison result output
+  ) {
+  //branch out Z, V and N signals
+  sig z,v,n;
+  
+  always {
+    z = zvn[2];
+    v = zvn[1];
+    n = zvn[0];
+    
+    //comparison mode selector using ALUFN1 and ALUFN0
+    case(alufn21){
+      b00: cmp[0] = b0; //unassigned
+      b01: cmp[0] = z; //A == B
+      b10: cmp[0] = n ^ v; //A < B
+      b11: cmp[0] = z | n ^ v; //A <= B
+      default: cmp[0] = b0; 
+    }
+    
+    cmp[15:1] = 15b0; //unused bits
+  }
+}

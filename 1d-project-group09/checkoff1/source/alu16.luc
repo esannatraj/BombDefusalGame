@@ -1,0 +1,68 @@
+// ALU module, combines adder, multiplier, boolean, shifter and comparator modules
+// operations encoded in ALUFN input code
+
+module alu16 (
+    input alufn[6], //ALUFN inputs 0 to 5
+    input a[16], //16-bit input A
+    input b[16], //16-bit input B
+    output alu[16], //16-bit ALU output
+    output zvn[3] //outputs Z, V and N from adder module
+  ) {
+  
+  adder16 adder; //16-bit adder module
+  mult16 mult; //16-bit multiplier module
+  boolean16 boolean; //16-bit boolean module
+  shifter16 shifter; //16-bit shifter module
+  compare16 compare; //16-bit comparison module
+  
+  //intermediate signals
+  sig arith[16];
+
+  always {
+    //adder module connections
+    adder.a = a;
+    adder.b = b;
+    adder.alufn0 = alufn[0];
+    zvn = adder.zvn;
+    
+    //multiplier module connections
+    mult.a = a;
+    mult.b = b;
+    
+    //boolean module connections
+    boolean.a = a;
+    boolean.b = b;
+    boolean.alufn3210 = alufn[3:0];
+    
+    //shifter module connections
+    shifter.a = a;
+    shifter.s = b[3:0];
+    shifter.alufn10 = alufn[1:0];
+    
+    //comparison module connections
+    compare.zvn = adder.zvn;
+    compare.alufn21 = alufn[2:1];
+    
+    //select between adder and multiplier outputs
+    case(alufn[1]){
+      b0:
+        arith = adder.s;
+        
+      b1:
+        arith = mult.p;
+      
+      default:
+        arith = adder.s;
+      }
+    
+    //output selector, based on ALUFN5 and ALUFN4 values
+    case(alufn[5:4]){
+      b00: alu = arith;
+      b01: alu = boolean.boole;
+      b10: alu = shifter.shift;
+      b11: alu = compare.cmp;
+      default: alu = arith;
+      }
+    
+  }
+}

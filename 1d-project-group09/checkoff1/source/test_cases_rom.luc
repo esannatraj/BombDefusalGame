@@ -1,0 +1,100 @@
+//encodes test cases for 16-bit ALU testing
+//
+
+module test_cases_rom (
+    input address[6], // 6-bit address of test case
+    output data[58],  // 58-bit encoded string of a test case
+    output tcid[6]    // test case id, to be displayed on 7-egment display
+  ) {
+  
+  // test cases are arranged in the followiing order: {a-input, b-input, alufn, output, zvn, zvn-cmp}
+  // c{...} syntax to concatenate values into 58-bit string
+  // zvn-cmp tells tester fsm whether to detect error in zvn signals or not (1 = detect, 0 = do not detect)
+  const TEST_CASES = {
+    
+    // CMP test cases
+    c{16h263a,16hff73,6h35,16h0000,3b000,b1},
+    c{16hdd33,16hdd33,6h37,16h0001,3b100,b1},
+    c{16h4432,16h8d3c,6h35,16h0000,3b011,b1},
+    c{16h8c45,16h8c45,6h33,16h0001,3b100,b1},
+    c{16h68a5,16ha425,6h37,16h0000,3b011,b1},
+    c{16h9566,16h7453,6h33,16h0000,3b010,b1},
+    c{16h5745,16h7242,6h35,16h0001,3b001,b1},
+    c{16ha88b,16h7633,6h37,16h0001,3b010,b1},
+    
+    // SRA test cases
+    c{16hC400,16h0003,6h23,16hF880,3b000,b0},
+    c{16h1A80,16h0006,6h23,16h006A,3b000,b0},
+    c{16h8293,16h0005,6h23,16hFC14,3b000,b0},
+    c{16h7FDF,16h0008,6h23,16h007F,3b000,b0},
+    c{16h3541,16h0002,6h23,16h0D50,3b000,b0},
+    c{16h9DB2,16h000B,6h23,16hFFF3,3b000,b0},
+    c{16h6A20,16h0007,6h23,16h00D4,3b000,b0},
+    c{16hF542,16h000D,6h23,16hFFFF,3b000,b0},
+    
+    // SHR test cases
+    c{16hFA34,16h0004,6h21,16h0FA3,3b000,b0},
+    c{16h0001,16h0003,6h21,16h0000,3b000,b0},
+    c{16hFFEE,16h000F,6h21,16h0001,3b000,b0},
+    c{16hFFFF,16h0001,6h21,16h7FFF,3b000,b0},
+    c{16h7652,16h0009,6h21,16h003B,3b000,b0},
+    c{16h3184,16h0006,6h21,16h00C6,3b000,b0},
+    c{16hD1B5,16h000D,6h21,16h0006,3b000,b0},
+    c{16h54BF,16h0002,6h21,16h152F,3b000,b0},
+    
+    // SHL test cases
+    c{16hFFFF,16h0005,6h20,16hFFE0,3b000,b0},
+    c{16h5521,16h0001,6h20,16hAA42,3b000,b0},
+    c{16h0FF6,16h0002,6h20,16h3FD8,3b000,b0},
+    c{16h22C5,16h000A,6h20,16h1400,3b000,b0},
+    c{16h5942,16h0009,6h20,16h8400,3b000,b0},
+    c{16h7DE5,16h0007,6h20,16hF280,3b000,b0},
+    c{16h3FFC,16h000E,6h20,16h0000,3b000,b0},
+    c{16h8641,16h000B,6h20,16h0800,3b000,b0},
+    
+    // BOOL test cases
+    c{16hFA34,16h0001,6h11,16h05CA,3b000,b0},
+    c{16h00D1,16hFFAF,6h17,16hFF7E,3b000,b0},
+    c{16hFFEE,16h0111,6h16,16hFEFF,3b000,b0},
+    c{16h0542,16hFFFF,6h1A,16h0542,3b000,b0},
+    c{16h52A7,16h9C88,6h18,16h1080,3b000,b0},
+    c{16h92D3,16h8205,6h1A,16h92D3,3b000,b0},
+    c{16hC053,16h250E,6h16,16hE55D,3b000,b0},
+    c{16h0483,16hD554,6h1E,16hD5D7,3b000,b0},
+    
+    // MULT test cases
+    c{16h77C8,16hF391,6h02,16hB048,3b000,b0},
+    c{16h00FA,16h00CE,6h02,16hC92C,3b000,b0},
+    c{16h1579,16h2D0A,6h02,16h1BBA,3b000,b0},
+    c{16h04BE,16h000F,6h02,16h4722,3b000,b0},
+    c{16h0555,16h00ED,6h02,16hEFB1,3b000,b0},
+    c{16h4385,16h1117,6h02,16hE5F3,3b000,b0},
+    c{16hC459,16hED38,6h02,16h5878,3b000,b0},
+    c{16h01C8,16hFD39,6h02,16h0D88,3b000,b0},
+    
+    // SUB test cases
+    c{16h3c61,16hf080,6h01,16h4be1,3b000,b1},
+    c{16h3354,16ha45e,6h01,16h8ef6,3b011,b1},
+    c{16h5465,16hb6a9,6h01,16h9dbc,3b011,b1},
+    c{16h8c0f,16h71fa,6h01,16h1a15,3b010,b1},
+    c{16h46ff,16hfff1,6h01,16h470e,3b000,b1},
+    c{16ha745,16hffff,6h01,16ha746,3b001,b1},
+    c{16ha5dc,16h766f,6h01,16h2f6d,3b010,b1},
+    c{16hffff,16hffff,6h01,16h0000,3b100,b1},
+    
+    // ADD test cases
+    c{16h9917,16ha3d1,6h00,16h3ce8,3b010,b1},
+    c{16h5dbc,16h7955,6h00,16hd711,3b011,b1},
+    c{16h4586,16h265c,6h00,16h6be2,3b000,b1},
+    c{16h89ae,16h7f53,6h00,16h0901,3b000,b1},
+    c{16h7c09,16h83f7,6h00,16h0000,3b100,b1},
+    c{16h8293,16hac14,6h00,16h2ea7,3b010,b1},
+    c{16h1a80,16h70d4,6h00,16h8b54,3b011,b1},
+    c{16hc400,16hf880,6h00,16hbc80,3b001,b1}
+    };
+
+  always {
+    data = TEST_CASES[address];
+    tcid = address;
+  }
+}

@@ -1,0 +1,198 @@
+//tester module for 16-bit ALU
+//2 modes: MANUAL and AUTO
+//MANUAL input using integrated and external DIP switches, output using integrated and external LEDs
+//AUTO input from ROM, output to LEDs and 7-segment display
+//Error simulation and detection
+//Buttons to switch between modes, and to temporarily pause in the AUTO mode
+
+module main_alu_tester (
+    //INPUTS
+    input clk,  // clock
+    input rst,  // reset
+    input mode_toggle, // toggles between MANUAL and AUTO modes
+    input temp_stop, // temporarily pauses tester FSM when held at 1
+    input speed_up, // temporarily increases speed of tester
+    input a[16], // 16-bit input A
+    input b[16], // 16-bit input B
+    input alufn[6], // 6-bit ALUFN input
+    input err_trig[2], // simulates error case
+
+    //OUTPUTS
+    output alufn_out[6], // displays ALUFN when AUTO mode is active
+    output result[16], // 16-bit (modified) output
+    output zvn[3], // Z, V and N signals from adder module
+    output disp[8], // display output for 7-segment display
+    output dsel[4], // cell selector for 7-seg display
+    output err_led[2] // shows the type of error case that occurred (left = ZVN, right = result) 
+  ) {
+  
+  const CLK_SIZE = 27; //determines speed of variable clock for FSM
+  const TC_SEG = {8b01111000,8b00111001}; // display output for test case id
+  const FAIL_SEG = {8b01110001,8b01110111,8b00000110,8b00111000}; // displays FAIL when error occurs
+  
+  counter varClock(#SIZE(CLK_SIZE),.clk(clk),.rst(rst)); // variable clock, speed depends on significance of bit observed
+  edge_detector slowClockEdge(#RISE(1),#FALL(0),.clk(clk)); // slow clock output
+  edge_detector fasterClockEdge(#RISE(1),#FALL(0),.clk(clk)); // faster clock output
+
+  dff addressIn[6](#INIT(0),.clk(clk),.rst(rst)); // feeds in address into test case ROM
+  fsm errorDetect(.clk(clk)) = {RUN, ERROR}; // stops going through test cases when error occurs
+  fsm modes(.clk(clk)) = {MANUAL,AUTO}; // switch between modes
+  
+  alu16 alUnit; // 16-bit ALU
+  test_cases_rom testCases; // access test cases
+  
+  button_conditioner toggleCond(.clk(clk)); // conditions toggle button press
+  edge_detector toggleEdge(#RISE(1),#FALL(0),.clk(clk)); // detects when button is pressed once
+  button_conditioner speedCond(.clk(clk)); // conditions speed_up button press
+  button_conditioner stopCond(.clk(clk)); // conditions temp_stop button press 
+  
+  hex_disp_rom hexROM[2]; // converts hex numbers to 7-segment display output
+  seven_seg_disp segDisp(.clk(clk),.rst(rst)); // 7-segment display
+  seg_cycle2 cycleDisp2(.clk(clk),.rst(rst)); // 7-segment display cycler
+  
+  sig result_out_alu[16];
+  sig result_out_rom[16];
+  sig zvn_out_alu[3];
+  sig zvn_out_rom[3];
+  sig zvn_cmp; // determines whether to detect error in ZVN signal
+  sig tcid_out[4][8]; // display out for 7-segment
+
+  always {
+    slowClockEdge.in = varClock.value[CLK_SIZE-1]; // MSB of varClock as slow clock
+    fasterClockEdge.in = varClock.value[CLK_SIZE-3]; // less significant bit of varClock acts as faster clock
+    
+    // default values
+    hexROM.in = 2x{{4b0}};
+    segDisp.values = 4x{{8b0}};
+    cycleDisp2.values = 2x{{4x{{8b0}}}};
+    
+    // button input connections and conditioners
+    toggleCond.in = mode_toggle;
+    toggleEdge.in = toggleCond.out;
+    stopCond.in = temp_stop;
+    speedCond.in = speed_up;
+    
+    // DFF feeds in address of test cases
+    testCases.address = addressIn.q;
+    
+    // Mode toggling
+    case(modes.q){ 
+      modes.MANUAL:
+        addressIn.d = 0; // DFF set at default value 0, does not increment
+        
+        // assign manual inputs
+        alUnit.a = a;
+        alUnit.b = b;
+        alUnit.alufn = alufn;
+        
+        // assign outputs
+        alufn_out = 6h0;
+        result = alUnit.alu;
+        zvn = alUnit.zvn;
+        disp = 8hff; // turned off
+        dsel = 4hf; // no cell selected
+        err_led = 2b0; // no error detection in MANUAL mode
+        if (toggleEdge.out == b1){modes.d = modes.AUTO;} else {modes.d = modes.MANUAL;} // switch mode when toggle button is pressed
+      
+      modes.AUTO:
+        alUnit.a = testCases.data[57:42]; // first 16 bits of data from ROM is A-input
+        alUnit.b = testCases.data[41:26]; // next 16 bits is B-input
+        alUnit.alufn = testCases.data[25:20]; // next 6 bits is ALUFN input (and so on...)
+        alufn_out = testCases.data[25:20]; // ALUFN display
+            
+        result_out_rom = testCases.data[19:4]; // expected 16-bit output
+        zvn_out_rom = testCases.data[3:1]; // expected ZVN signals
+        zvn_cmp = testCases.data[0]; // ZVN error ddetect control signal
+        
+        hexROM.in = $build(c{2b0,testCases.tcid},2); // converts test case id to displayable hex
+        tcid_out = c{TC_SEG, hexROM.out}; // concatenate with prefix TC
+        
+        result_out_alu[14:0] = alUnit.alu[14:0];
+        if (err_trig[0] == b1) {result_out_alu[15] = b0;} else {result_out_alu[15] = alUnit.alu[15];} // simulates MSB stuck at 0
+        zvn_out_alu[2:1] = alUnit.zvn[2:1];
+        if (err_trig[1] == b1) {zvn_out_alu[0] = b0;} else {zvn_out_alu[0] = alUnit.zvn[0];} // simulates N signal stuck at 0
+        
+        // Detect error in AUTO mode
+        case(errorDetect.q){
+          errorDetect.RUN:
+          if (speedCond.out == b1) { // if speed_up button is pressed and held
+            if (fasterClockEdge.out == b1){
+              addressIn.d = addressIn.q + 1; // DFF increments address to access next test case at higher clock speed
+              }
+            } else { // if speed_up button is released
+            if (slowClockEdge.out == b1){
+              addressIn.d = addressIn.q + 1; // DFF increments address to access next test case at normal (slower) clock speed
+              }
+            }
+          if (stopCond.out == b1) {addressIn.d = addressIn.q;} // if temp_stop button is pressed and held, DFF holds address at the current value
+          
+            
+            // displays test case id on 7-segment display
+            segDisp.values = tcid_out;
+            disp = ~segDisp.seg;
+            dsel = ~segDisp.sel;
+            
+            // error detection
+            if (result_out_alu != result_out_rom || (zvn_out_alu != zvn_out_rom && zvn_cmp)){errorDetect.d = errorDetect.ERROR;}
+          
+          errorDetect.ERROR:
+            addressIn.d = addressIn.q; // address increment stopped
+
+            // cycles between test case id and "FAIL"
+            cycleDisp2.values = {FAIL_SEG,tcid_out}; 
+            disp = ~cycleDisp2.disp;
+            dsel = ~cycleDisp2.dsel;
+            
+            if (result_out_alu != result_out_rom){err_led[0] = b1;} else {err_led[0] = b0;} // ZVN error
+            if (zvn_out_alu != zvn_out_rom && zvn_cmp){err_led[1] = b1;} else {err_led[1] = b0;} // result error
+
+            // when error is removed, continue to run auto tester
+            if (result_out_alu == result_out_rom && (zvn_out_alu == zvn_out_rom || ~zvn_cmp)) {errorDetect.d = errorDetect.RUN;} else {errorDetect.d = errorDetect.ERROR;}
+          
+          // default values to keep Lucid happy
+          // essentially the same as in the modes.MANUAL case
+          default:
+            if (slowClockEdge.out == b1){
+              addressIn.d = addressIn.q + 1;
+            }
+            if (stopCond.out == b1) {addressIn.d = addressIn.q;}
+            
+            result_out_alu[14:0] = alUnit.alu[14:0];
+            if (err_trig[0] == b1) {result_out_alu[15] = b0;} else {result_out_alu[15] = alUnit.alu[15];}
+            zvn_out_alu[2:1] = alUnit.zvn[2:1];
+            if (err_trig[1] == b1) {zvn_out_alu[0] = b0;} else {zvn_out_alu[0] = alUnit.zvn[0];}
+            
+            segDisp.values = tcid_out;
+            disp = ~segDisp.seg;
+            dsel = ~segDisp.sel;
+            
+            if (result_out_alu != result_out_rom || (zvn_out_alu != zvn_out_rom && zvn_cmp)){errorDetect.d = errorDetect.ERROR;}
+          }
+        
+        // display ALU results and ZVN outputs
+        result = result_out_alu;
+        zvn = zvn_out_alu;
+        if (toggleEdge.out == b1){modes.d = modes.MANUAL;} else {modes.d = modes.AUTO;} // switch modes
+        
+      // more default values to keep Lucid happy
+      default:
+        addressIn.d = 0;
+        
+        alUnit.a = a;
+        alUnit.b = b;
+        alUnit.alufn = alufn;
+        
+        alufn_out = 6h0;
+        result = alUnit.alu;
+        zvn = alUnit.zvn;
+        disp = 8hff;
+        dsel = 4hf;
+        
+        
+        
+      }
+        
+    
+    
+  }
+}

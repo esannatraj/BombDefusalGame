@@ -1,0 +1,70 @@
+module regfile_unit16 (
+    input clk,  // clock
+    input rst,  // reset
+    
+    // read control signals & outputs
+    input ra1[4],
+    input ra2[4],
+    output rd1[16],
+    output rd2[16],
+    
+    // write control signals
+    input wa[4],
+    input wd[16],
+    input we,
+    
+    // misc signals
+    output z,
+    output prog[5],
+    output miss,
+    output acc,
+    output wire_led[4]
+    
+  ) {
+  
+  dff reg[16][16](.clk(clk));
+  
+  sig led_out[4]; // intermediate signal for wire LED output
+  // var i;
+
+  always {
+  
+    /* registers
+      
+       r0 to r3, r9 to r11: unused
+       r4: wire led out
+       r5: hit counter
+       r6: miss counter
+       r7: rand timer
+       r8: react prog disp
+       r12 to r13: temp reg
+       r14: speed trigger
+       r15: wire sequence
+       */
+    
+    rd1 = reg.q[ra1];
+    rd2 = reg.q[ra2];
+    
+    if (we) reg.d[wa] = wd;
+    
+    if (rst == b1) {
+      reg.d = 16x{{16b0}};
+      }
+    
+    z = ~|reg.q[ra1]; // 16-bit NOR of Reg[ra1]
+    prog = reg.q[8][4:0]; // display progress of REACTION game
+    miss = reg.q[6][0]; // trigger time penalty
+    acc = reg.q[14][0]; // trigger temporary time acceleration
+    
+    // wire LED output
+    // if correct combination input, result = 0
+    // result = 1 if wrong input / mismatch
+    led_out[0] = |reg.q[4][1:0];
+    led_out[1] = |reg.q[4][3:2];
+    led_out[2] = |reg.q[4][5:4];
+    led_out[3] = |reg.q[4][7:6];
+    
+    wire_led = led_out;
+    
+  }
+}

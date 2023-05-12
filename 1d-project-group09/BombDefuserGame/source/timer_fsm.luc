@@ -1,0 +1,170 @@
+module timer_fsm #(
+    // timer must be at least "1 second" (2^26 clock cycles) 
+    MIN = 1: 0 <= MIN <= 99, // number of minutes
+    SEC = 0: 0 <= MIN <= 59 && !(MIN == 0 && SEC == 0), // number of seconds
+    PENALTY = 4: PENALTY > 0, // time penalty per error
+    ACC = 3: ACC > 0 // temporary time acceleration
+)(
+    input clk,  // clock
+    input rst,  // reset
+    input start_btn, // main start/restart button
+    input temp_acc, // temporary acceleration signal
+    input penalty, // time deduction signal
+    input stop, // timer stop signal
+    output disp[8], // 7-segment display output
+    output dsel[4], // 7-segment display select
+    output ended, // game end output signal
+    
+    // debug
+    output clk_led,
+    output state_led[3],
+    output timer_led[8]
+    
+  ) {
+  
+  fsm timerFSM(.clk(clk)) = {START, CHECK, WAIT, MINUS_1, STOP};
+  
+  // timer values for minutes & seconds
+  dff timerMin[8](#INIT(MIN),.clk(clk),.rst(rst));
+  dff timerSec[8](#INIT(SEC),.clk(clk),.rst(rst));
+  
+  // timer div (smaller div = faster clock)
+  dff timerDiv[5](#INIT(26),.clk(clk),.rst(rst));
+  
+  // variable clock with edge detector
+  varclock32 slowclk(.clk(clk),.rst(rst));
+  edge_detector slowclkEdge(#RISE(1), #FALL(0), .clk(clk));
+  
+  // modules for displaying timer
+  seven_seg_disp display(.clk(clk),.rst(rst));
+  hex_disp_rom hexROM[4];
+  bin_to_dec min_decConverter(#DIGITS(2),#LEADING_ZEROS(1));
+  bin_to_dec sec_decConverter(#DIGITS(2),#LEADING_ZEROS(1));
+  
+  // conditioner and edge detector for start button
+  button_conditioner startBtnCond(.clk(clk));
+  edge_detector startBtnEdge(#RISE(1),#FALL(0),.clk(clk));
+  
+  // edge detector for penalty and speed increase signals
+  edge_detector penEdge(.clk(clk));
+  
+  // intermediate signal for display to modify output
+  sig disp_out[4][8];
+
+  always {
+    ended = 0;
+    
+    slowclk.div = timerDiv.q;
+    
+    penEdge.in = penalty;
+     
+    slowclkEdge.in = slowclk.out;
+      
+    startBtnCond.in = start_btn;
+    startBtnEdge.in = startBtnCond.out;    
+    
+    sec_decConverter.value = timerSec.q;
+    min_decConverter.value = timerMin.q;
+    
+    // reuse hex display digits for decimal values
+    hexROM.in[1:0] = sec_decConverter.digits; 
+    hexROM.in[3:2] = min_decConverter.digits;
+    
+    disp_out = hexROM.out;
+    disp_out[2][7] = 1; // use decimal point as min/sec separator
+    
+    
+    // debug LEDs
+    clk_led = slowclk.out;
+    state_led = 0;
+    timer_led = timerSec.q;
+    
+    // main timer FSM
+    case(timerFSM.q){
+      timerFSM.START:
+        // initialise default values
+        state_led = 0;
+        timerMin.d = MIN;
+        timerSec.d = SEC;
+        
+        // start timer when start button is pressed
+        if (startBtnEdge.out == b1) timerFSM.d = timerFSM.CHECK;
+         
+      timerFSM.CHECK:
+        state_led = 1;
+        disp_out[2][7] = slowclk.out; // blink dot separator when timer is running
+        
+        // check whether timer is completed (timer = 0)
+        if (timerMin.q == 0 && timerSec.q == 0) {timerFSM.d = timerFSM.STOP;}
+        else timerFSM.d = timerFSM.WAIT;
+        
+      timerFSM.WAIT:
+        state_led = 2;
+        disp_out[2][7] = slowclk.out;
+        
+        // deduct time from timer if player makes an error
+        if (penEdge.out) {
+          if (timerSec.q < PENALTY) {
+            // if time left < penalty, set timer to 0
+            if (timerMin.q == 0) {
+              timerSec.d = 0;
+            } else { // borrow 1 minute (60 seconds) from minute DFF
+              timerMin.d = timerMin.q - 1;
+              timerSec.d = timerSec.q + 60 - PENALTY;
+            }
+          } else timerSec.d = timerSec.q - PENALTY;
+        }
+        
+        // (for WIRE game) temporarily speed up timer when all wires are plugged AND sequence is incorrect
+        if (temp_acc) timerDiv.d = 26 - ACC;
+        // (for WIRE game) revert timer speed when at least 1 wire is unplugged
+        else timerDiv.d = 26;
+        
+        // stop timer when both games are completed
+        if (stop) timerFSM.d = timerFSM.STOP;
+        // minus 1 from timer every "1 second"
+        else if (slowclkEdge.out == b1) {timerFSM.d = timerFSM.MINUS_1;}
+        // else, loop in idle
+        else timerFSM.d = timerFSM.WAIT;
+        
+      timerFSM.MINUS_1:
+        state_led = 3;
+        disp_out[2][7] = slowclk.out;
+        
+        if (timerSec.q == 0) {
+          if (timerMin.q != 0){ // if timer is not 0 but seconds is 0
+            // borrow 1 minute from minute DFF
+            timerMin.d = timerMin.q - 1;
+            timerSec.d = 59;
+          }
+        } else timerSec.d = timerSec.q - 1;
+        timerFSM.d = timerFSM.CHECK;        
+      
+      timerFSM.STOP:
+        state_led = 4;
+        disp_out[2][7] = 1;
+        
+        // send stop signal to game FSM when timer ends before game completion
+        ended = 1;
+        
+        // upon game restart
+        if (startBtnEdge.out == b1) {
+          // revert default values
+          ended = 0;
+          timerDiv.d = 26;
+          timerFSM.d = timerFSM.START;
+          } else {timerFSM.d = timerFSM.STOP;}
+        
+      default:
+        timerFSM.d = timerFSM.START;
+      }
+    
+    // 7-segment display out
+    display.values = disp_out;
+    disp = display.seg;
+    dsel = display.sel;
+    
+    // reset FSM state
+    if (rst == b1) timerFSM.d = timerFSM.START; 
+  }
+}

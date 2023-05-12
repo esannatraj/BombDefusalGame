@@ -1,0 +1,71 @@
+module au_top (
+    input clk,                // 100MHz clock
+    input rst_n,              // reset button (active low)
+    input usb_rx,             // USB->Serial input
+    output led [8],           // 8 user controllable LEDs
+    output usb_tx,            // USB->Serial output
+    output io_seg [8],        // 7-segment LEDs on IO Shield
+    output io_sel [4],        // Digit select on IO Shield
+    output io_led[3][8],      // LEDs on IO shield
+    
+    // main I/O
+    input game_btn,           // main button to start the game
+    output game_led[2][2],    // RG LEDs to indicate game status
+    
+    // I/O for wiring game
+    input wire_in[8],         // Data output to wires
+    input wire_ce[4],         // Enable wire values check
+    output wire_out[4][2],    // Data input from wires
+    output wire_led[4],       // Status LEDs for wire connections
+    
+    // I/O for reaction game
+    input react_btn,          // Button input for reaction game
+    output react_tar_led,     // Target LED output
+    output react_prog_led[5]  // Progress LEDs output
+    
+  ) {
+  
+  sig rst;                    // reset signal
+  
+  .clk(clk) {
+    // The reset conditioner is used to synchronize the reset signal to the FPGA
+    // clock. This ensures the entire FPGA comes out of reset at the same time.
+    reset_conditioner reset_cond;
+  }
+  
+  cpu cPU(.clk(clk),.rst(rst));
+  
+  always {
+    reset_cond.in = ~rst_n; // input raw inverted reset signal
+    rst = reset_cond.out;   // conditioned reset
+    
+    usb_tx = usb_rx;        // loop serial port
+    
+    led = 8h00;             // turn LEDs off
+    
+    cPU.game_btn = game_btn;
+    game_led = cPU.game_led;
+    
+    cPU.wire_in = wire_in;
+    cPU.wire_ce = wire_ce;
+    wire_out = cPU.wire_out;
+    wire_led = cPU.wire_led;
+    
+    cPU.react_btn = react_btn;
+    react_tar_led = cPU.react_tar_led;
+    react_prog_led = cPU.react_prog_led;
+    
+    io_seg = ~cPU.disp;
+    io_sel = ~cPU.dsel;
+    
+    // debug + aesthetic
+    io_led[2][0] = cPU.clk_led;
+    io_led[1] = cPU.timer_led;
+    io_led[0][2:0] = cPU.state_led;
+    
+    io_led[2][7] = cPU.wire_plugged;
+    io_led[2][6] = cPU.wire_idle;
+    io_led[2][5] = cPU.reactIdle;
+    
+  }
+}
